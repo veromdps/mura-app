@@ -433,18 +433,32 @@ tr.clickable:active td{background:#f5f5f5}
 <div class="overlay" id="modal-catalogo">
   <div class="modal">
     <div class="modal-header"><div class="modal-title" id="cat-modal-title">Nuevo producto</div><button class="modal-close" onclick="closeModal('catalogo')">×</button></div>
+
+    <!-- Resumen precios desde calculadora -->
+    <div id="cat-calc-summary" style="display:none;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:12px;margin-bottom:14px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#166534;margin-bottom:8px">✓ Precios desde calculadora</div>
+      <div id="cat-calc-precios" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px"></div>
+      <div style="font-size:12px;color:#166534">Coste real: <strong id="cat-calc-coste"></strong></div>
+    </div>
+
     <div class="field"><label>Nombre *</label><input id="c-nombre" type="text" placeholder="Ej: Topper boda personalizado" autocomplete="off"></div>
     <div class="field"><label>Categoría</label><input id="c-cat" type="text" placeholder="Topper, Letra, Souvenir, Deco..." autocomplete="off"></div>
-    <div class="field"><label>Descripción</label><textarea id="c-desc" placeholder="Detalles, tiempo impresión, notas..."></textarea></div>
-    <div class="field-row3">
-      <div class="field"><label>Conocidas (€)</label><input id="c-p1" type="number" step="0.01" placeholder="0.00" inputmode="decimal"></div>
-      <div class="field"><label>Wallapop (€)</label><input id="c-p2" type="number" step="0.01" placeholder="0.00" inputmode="decimal"></div>
-      <div class="field"><label>Etsy (€)</label><input id="c-p3" type="number" step="0.01" placeholder="0.00" inputmode="decimal"></div>
+    <div class="field"><label>Descripción / notas</label><textarea id="c-desc" placeholder="Tiempo impresión, color habitual, detalles..."></textarea></div>
+
+    <!-- Precios manuales (edición o sin calculadora) -->
+    <div id="cat-precios-manual">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#666;margin:4px 0 8px">Precios por canal</div>
+      <div class="field-row3">
+        <div class="field"><label>Conocidas (€)</label><input id="c-p1" type="number" step="0.01" placeholder="0.00" inputmode="decimal"></div>
+        <div class="field"><label>Wallapop (€)</label><input id="c-p2" type="number" step="0.01" placeholder="0.00" inputmode="decimal"></div>
+        <div class="field"><label>Etsy (€)</label><input id="c-p3" type="number" step="0.01" placeholder="0.00" inputmode="decimal"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Coste real (€)</label><input id="c-coste" type="number" step="0.01" placeholder="0.00" inputmode="decimal"></div>
+        <div class="field"><label>Tiempo impresión (h)</label><input id="c-tiempo" type="number" step="0.5" placeholder="0" inputmode="decimal"></div>
+      </div>
     </div>
-    <div class="field-row">
-      <div class="field"><label>Coste material (€)</label><input id="c-coste" type="number" step="0.01" placeholder="0.00" inputmode="decimal"></div>
-      <div class="field"><label>Tiempo impresión (h)</label><input id="c-tiempo" type="number" step="0.5" placeholder="0" inputmode="decimal"></div>
-    </div>
+
     <div class="actions-row">
       <button class="btn" onclick="saveCatalogo()">Guardar</button>
       <button class="btn secondary" onclick="closeModal('catalogo')">Cancelar</button>
@@ -673,6 +687,9 @@ function openModal(type, id) {
     editingCat = id || null;
     document.getElementById('btn-del-cat').style.display = id ? 'block' : 'none';
     document.getElementById('cat-modal-title').textContent = id ? 'Editar producto' : 'Nuevo producto';
+    // Siempre mostrar campos manuales al abrir directamente
+    document.getElementById('cat-calc-summary').style.display = 'none';
+    document.getElementById('cat-precios-manual').style.display = 'block';
     const c = id ? S.catalogo.find(x => x.id === id) : {};
     document.getElementById('c-nombre').value = c.nombre || '';
     document.getElementById('c-cat').value = c.cat || '';
@@ -1069,6 +1086,15 @@ function usarEnPedido() {
 function guardarEnCatalogo() {
   if (!calcResult) return;
   openModal('catalogo');
+  // Mostrar resumen verde y ocultar campos manuales
+  document.getElementById('cat-calc-summary').style.display = 'block';
+  document.getElementById('cat-precios-manual').style.display = 'none';
+  document.getElementById('cat-calc-coste').textContent = fmt(calcResult.coste);
+  // Mostrar precios por canal en chips
+  const chips = Object.entries(calcResult.precios).map(([k,v]) =>
+    `<span class="precio-chip best">${k}: ${fmt(v)}</span>`).join('');
+  document.getElementById('cat-calc-precios').innerHTML = chips;
+  // Rellenar campos ocultos
   document.getElementById('c-coste').value = calcResult.coste.toFixed(2);
   const nombres = Object.keys(calcResult.precios);
   nombres.forEach(n => {
@@ -1077,7 +1103,7 @@ function guardarEnCatalogo() {
     else if (nl.includes('wallapop')) document.getElementById('c-p2').value = calcResult.precios[n].toFixed(2);
     else if (nl.includes('etsy')) document.getElementById('c-p3').value = calcResult.precios[n].toFixed(2);
   });
-  showAlert('Precios precargados. Añade el nombre y guarda.', 'info');
+  showAlert('Solo pon el nombre y categoría — el resto está calculado', 'info');
 }
 
 // MINI CALCULADORA EN PEDIDO
