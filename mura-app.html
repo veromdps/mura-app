@@ -262,7 +262,10 @@ tr.clickable:active td{background:#f5f5f5}
         <div class="calc-title">Precios sugeridos por canal</div>
         <div class="calc-precios" id="calc-precios" style="grid-template-columns:repeat(2,1fr)"></div>
       </div>
-      <button class="btn green full" style="margin-top:4px" onclick="guardarEnCatalogo()">Guardar en catálogo →</button>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:4px">
+        <button class="btn green" onclick="usarEnPedido()">Usar en pedido →</button>
+        <button class="btn secondary" onclick="guardarEnCatalogo()">Guardar en catálogo →</button>
+      </div>
     </div>
     <div id="calc-empty" style="padding:16px;text-align:center;color:#aaa;font-size:13px">Rellena los datos del producto para ver el precio.</div>
   </div>
@@ -375,8 +378,36 @@ tr.clickable:active td{background:#f5f5f5}
     <div class="field"><label>Producto *</label><input id="p-producto" type="text" placeholder="Ej: Topper boda personalizado" autocomplete="off"></div>
     <div class="field-row">
       <div class="field"><label>Precio cobrado (€)</label><input id="p-precio" type="number" step="0.01" placeholder="0.00" inputmode="decimal"></div>
-      <div class="field"><label>Coste material (€)</label><input id="p-coste" type="number" step="0.01" placeholder="0.00" inputmode="decimal"></div>
+      <div class="field">
+        <label>Coste real (€)</label>
+        <div style="display:flex;gap:6px;align-items:center">
+          <input id="p-coste" type="number" step="0.01" placeholder="0.00" inputmode="decimal" style="flex:1">
+          <button class="btn secondary small" onclick="toggleMiniCalc()" title="Calcular coste" style="padding:9px 10px;white-space:nowrap">🧮</button>
+        </div>
+      </div>
     </div>
+
+    <!-- MINI CALCULADORA -->
+    <div id="mini-calc" style="display:none;background:#f5f5f5;border:1.5px solid #ddd;border-radius:8px;padding:14px;margin-bottom:12px">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#666;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center">
+        Calcular coste
+        <button onclick="toggleMiniCalc()" style="background:none;border:none;font-size:18px;color:#888;cursor:pointer;line-height:1">×</button>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Gramos filamento</label><input id="mc-gramos" type="number" placeholder="0" inputmode="decimal" oninput="miniCalcular()"></div>
+        <div class="field"><label>Horas impresión</label><input id="mc-timp" type="number" step="0.5" placeholder="0" inputmode="decimal" oninput="miniCalcular()"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Horas trabajo (h)</label><input id="mc-htrab" type="number" step="0.5" placeholder="0" inputmode="decimal" oninput="miniCalcular()"></div>
+        <div class="field"><label>Extras (€)</label><input id="mc-extras" type="number" step="0.01" placeholder="0.00" inputmode="decimal" oninput="miniCalcular()"></div>
+      </div>
+      <div id="mc-result" style="display:none;margin-top:8px">
+        <div style="background:#fff;border-radius:6px;padding:10px;font-size:12px;color:#555;margin-bottom:8px" id="mc-desglose"></div>
+        <button class="btn green full" style="margin-bottom:0" onclick="usarCosteMiniCalc()">Usar este coste →</button>
+      </div>
+      <div id="mc-empty" style="font-size:12px;color:#aaa;text-align:center;padding:6px">Rellena gramos u horas para calcular.</div>
+    </div>
+
     <div class="field-row">
       <div class="field"><label>Canal</label><select id="p-canal"><option>Instagram</option><option>Etsy</option><option>Wallapop</option><option>Conocida</option></select></div>
       <div class="field"><label>Estado</label><select id="p-estado"><option value="pendiente">Pendiente</option><option value="imprimiendo">Imprimiendo</option><option value="enviado">Enviado</option><option value="entregado">Entregado</option></select></div>
@@ -712,8 +743,9 @@ function usarCatalogo(id) {
   if (canal === 'Conocida' && c.p1) document.getElementById('p-precio').value = c.p1;
   else if (canal === 'Wallapop' && c.p2) document.getElementById('p-precio').value = c.p2;
   else if (canal === 'Etsy' && c.p3) document.getElementById('p-precio').value = c.p3;
+  document.getElementById('mini-calc').style.display = 'none';
   closeModal('cat-select');
-  showAlert('Producto cargado del catálogo', 'success');
+  showAlert(c.coste ? `Producto cargado · coste ${fmt(c.coste)} del catálogo` : 'Producto cargado. Calcula el coste con 🧮', c.coste ? 'success' : 'info');
 }
 
 // SAVES
@@ -721,6 +753,11 @@ function savePedido() {
   const c = document.getElementById('p-cliente').value.trim();
   const pr = document.getElementById('p-producto').value.trim();
   if (!c || !pr) return showAlert('Cliente y producto son obligatorios', 'error');
+  const coste = parseFloat(document.getElementById('p-coste').value) || 0;
+  if (coste === 0) {
+    const seguir = confirm('No has introducido el coste real — el beneficio no será preciso.\n\n¿Continuar sin coste o cancelar para calcularlo?');
+    if (!seguir) return;
+  }
   const obj = {id: editingPedido || Date.now(), cliente: c, fecha: document.getElementById('p-fecha').value,
     producto: pr, precio: parseFloat(document.getElementById('p-precio').value) || 0,
     coste: parseFloat(document.getElementById('p-coste').value) || 0,
@@ -1004,12 +1041,36 @@ function calcular() {
   document.getElementById('calc-precios').innerHTML = cols;
 }
 
+function usarEnPedido() {
+  if (!calcResult) return;
+  // Abre el modal de pedido con el coste precargado
+  openModal('pedido');
+  document.getElementById('p-coste').value = calcResult.coste.toFixed(2);
+  // Intentar precargar precio según canal seleccionado
+  const canal = document.getElementById('p-canal').value;
+  const m = MARGENES.find(m => {
+    const nl = m.nombre.toLowerCase();
+    if (canal === 'Conocida') return nl.includes('conocid') || nl.includes('amig');
+    if (canal === 'Wallapop') return nl.includes('wallapop');
+    if (canal === 'Etsy') return nl.includes('etsy');
+    return false;
+  });
+  if (m && calcResult.precios[m.nombre]) {
+    document.getElementById('p-precio').value = calcResult.precios[m.nombre].toFixed(2);
+  }
+  // Cambiar tab a pedidos para que sea visible
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(n => n.classList.remove('active'));
+  document.getElementById('tab-pedidos').classList.add('active');
+  document.querySelectorAll('.nav-tab')[1].classList.add('active');
+  showAlert('Coste y precio cargados desde la calculadora', 'success');
+}
+
 function guardarEnCatalogo() {
   if (!calcResult) return;
   openModal('catalogo');
   document.getElementById('c-coste').value = calcResult.coste.toFixed(2);
   const nombres = Object.keys(calcResult.precios);
-  // Intentar mapear a los campos conocidos
   nombres.forEach(n => {
     const nl = n.toLowerCase();
     if (nl.includes('conocid') || nl.includes('amig')) document.getElementById('c-p1').value = calcResult.precios[n].toFixed(2);
@@ -1017,6 +1078,63 @@ function guardarEnCatalogo() {
     else if (nl.includes('etsy')) document.getElementById('c-p3').value = calcResult.precios[n].toFixed(2);
   });
   showAlert('Precios precargados. Añade el nombre y guarda.', 'info');
+}
+
+// MINI CALCULADORA EN PEDIDO
+function toggleMiniCalc() {
+  const mc = document.getElementById('mini-calc');
+  const visible = mc.style.display !== 'none';
+  mc.style.display = visible ? 'none' : 'block';
+  if (!visible) {
+    document.getElementById('mc-gramos').value = '';
+    document.getElementById('mc-timp').value = '';
+    document.getElementById('mc-htrab').value = '';
+    document.getElementById('mc-extras').value = '';
+    document.getElementById('mc-result').style.display = 'none';
+    document.getElementById('mc-empty').style.display = 'block';
+  }
+}
+
+function miniCalcular() {
+  const gramos = parseFloat(document.getElementById('mc-gramos').value) || 0;
+  const tImp   = parseFloat(document.getElementById('mc-timp').value)   || 0;
+  const hTrab  = parseFloat(document.getElementById('mc-htrab').value)  || 0;
+  const extras = parseFloat(document.getElementById('mc-extras').value) || 0;
+
+  const cosFilamento = gramos / 1000 * BP.filKg;
+  const cosMaquina   = tImp * (BP.elec + BP.amor + BP.oport);
+  const cosTrabajo   = hTrab * BP.hora;
+  const total        = cosFilamento + cosMaquina + cosTrabajo + extras;
+
+  if (total === 0) {
+    document.getElementById('mc-result').style.display = 'none';
+    document.getElementById('mc-empty').style.display = 'block';
+    return;
+  }
+  document.getElementById('mc-result').style.display = 'block';
+  document.getElementById('mc-empty').style.display = 'none';
+
+  const lineas = [
+    cosFilamento > 0 ? `Filamento (${gramos}g): ${fmt(cosFilamento)}` : null,
+    cosMaquina > 0   ? `Máquina (${tImp}h): ${fmt(cosMaquina)}` : null,
+    cosTrabajo > 0   ? `Trabajo (${hTrab}h): ${fmt(cosTrabajo)}` : null,
+    extras > 0       ? `Extras: ${fmt(extras)}` : null,
+  ].filter(Boolean);
+
+  document.getElementById('mc-desglose').innerHTML =
+    lineas.map(l => `<div style="display:flex;justify-content:space-between"><span>${l.split(':')[0]}</span><span><strong>${l.split(':')[1]}</strong></span></div>`).join('') +
+    `<div style="display:flex;justify-content:space-between;border-top:1px solid #ddd;margin-top:6px;padding-top:6px;font-weight:800"><span>Total</span><span style="color:var(--green)">${fmt(total)}</span></div>`;
+}
+
+function usarCosteMiniCalc() {
+  const gramos = parseFloat(document.getElementById('mc-gramos').value) || 0;
+  const tImp   = parseFloat(document.getElementById('mc-timp').value)   || 0;
+  const hTrab  = parseFloat(document.getElementById('mc-htrab').value)  || 0;
+  const extras = parseFloat(document.getElementById('mc-extras').value) || 0;
+  const total  = gramos/1000*BP.filKg + tImp*(BP.elec+BP.amor+BP.oport) + hTrab*BP.hora + extras;
+  document.getElementById('p-coste').value = total.toFixed(2);
+  document.getElementById('mini-calc').style.display = 'none';
+  showAlert('Coste calculado y aplicado', 'success');
 }
 
 // FILTERS
