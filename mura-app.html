@@ -614,6 +614,11 @@ function setSyncStatus(s) {
 }
 
 async function fbGuardar() {
+  // Protección: no guardar si los datos locales están vacíos y hay datos en la nube
+  if (S.pedidos.length === 0 && S.productos.length === 0 && S.filamentos.length === 0) {
+    const confirmar = confirm('No tienes datos locales. Si guardas ahora borrarás todo lo que hay en la nube.\n\n¿Seguro que quieres continuar?');
+    if (!confirmar) return;
+  }
   setSyncStatus('syncing');
   try {
     const payload = {fields:{datos:{stringValue:JSON.stringify(S)},updated:{stringValue:new Date().toISOString()}}};
@@ -653,7 +658,7 @@ async function fbCargar() {
   }
 }
 
-async function saveAndSync() { persistLocal(); fbGuardar(); }
+async function saveAndSync() { persistLocal(); }
 function updateSyncUI() { setSyncStatus('ok'); document.getElementById('firebase-status').textContent='Firebase listo — usa los botones para sync'; }
 
 // ═══ STORAGE ═══
@@ -1385,6 +1390,8 @@ function showAlert(msg,type){
 
 loadLocal();
 render();
+// Cargar desde Firebase automáticamente al arrancar
+fbCargar();
 </script>
 </body>
 </html>
