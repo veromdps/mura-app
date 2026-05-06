@@ -309,29 +309,15 @@ tr.clickable:active td{background:var(--cream)}
   <div class="section" id="tab-ajustes">
     <div class="sync-config">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
-        <div style="font-weight:800;font-size:15px;flex:1">Sync Google Sheets</div>
+        <div style="font-weight:800;font-size:15px;flex:1">Sync con Firebase ☁️</div>
         <span class="sync-badge off" id="sync-badge-text">Sin conectar</span>
       </div>
-      <div class="field">
-        <label>URL del Apps Script</label>
-        <input id="sheet-url" type="url" placeholder="https://script.google.com/macros/s/..." style="font-size:13px" oninput="saveSheetUrl()">
-      </div>
+      <div id="firebase-status" style="font-size:13px;color:var(--muted);margin-bottom:12px">Conectando con Firebase...</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn" onclick="syncNow()">↺ Sincronizar ahora</button>
-        <button class="btn secondary" onclick="toggleInstr()">Instrucciones</button>
+        <button class="btn green" onclick="fbGuardar()">↑ Guardar en nube</button>
+        <button class="btn secondary" onclick="fbCargar()">↓ Cargar desde nube</button>
       </div>
-      <div id="sync-last" style="font-size:11px;color:#888;margin-top:8px"></div>
-    </div>
-    <div id="sync-instr" style="display:none" class="backup-section">
-      <div class="backup-title" style="margin-bottom:12px">Configurar sync — 6 pasos</div>
-      <div class="step-inst"><div class="step-num">1</div><div class="step-text">Ve a <strong>sheets.google.com</strong>, crea una hoja nueva llamada <strong>mura-datos</strong> y compártela con Alex como Editor.</div></div>
-      <div class="step-inst"><div class="step-num">2</div><div class="step-text">Dentro de la hoja: <strong>Extensiones → Apps Script</strong>.</div></div>
-      <div class="step-inst"><div class="step-num">3</div><div class="step-text">Borra el código y pega este:</div></div>
-      <div class="code-block" id="script-code-block"></div>
-      <button class="btn secondary small" onclick="copiarScript()" style="margin-bottom:14px">Copiar código</button>
-      <div class="step-inst"><div class="step-num">4</div><div class="step-text"><strong>Implementar → Nueva implementación → Aplicación web</strong>. Acceso: <strong>Cualquier usuario</strong>. Implementar y copia la URL.</div></div>
-      <div class="step-inst"><div class="step-num">5</div><div class="step-text">Pega la URL arriba y pulsa <strong>Sincronizar ahora</strong>. El punto verde confirma que funciona.</div></div>
-      <div class="step-inst"><div class="step-num">6</div><div class="step-text">Alex abre la app en su móvil, pega la misma URL y sincroniza.</div></div>
+      <div id="sync-last" style="font-size:11px;color:var(--subtle);margin-top:8px"></div>
     </div>
     <div class="backup-section">
       <div class="backup-title">Estado de los datos</div>
@@ -612,37 +598,75 @@ let NP_RESULT = null;
 let NP_EDITING_ID = null;
 let editingPedido=null, editingFil=null, editingGasto=null, editingNota=null, editingProd=null;
 let pedidoFilter='todos', notaFilter='todos', prodFilter='todos';
-let importCount=0, sheetUrl='', filPedidoRows=[];
+let importCount=0, filPedidoRows=[];
 
-const SCRIPT_CODE = `function doGet(e){
-  var ss=SpreadsheetApp.getActiveSpreadsheet();
-  var sh=ss.getSheetByName('data')||ss.insertSheet('data');
-  if(sh.getLastRow()===0)sh.appendRow(['json']);
-  var row=sh.getRange(2,1).getValue();
-  var data=row?JSON.parse(row):{pedidos:[],productos:[],filamentos:[],gastos:[],notas:[]};
-  return ContentService.createTextOutput(JSON.stringify(data)).setMimeType(ContentService.MimeType.JSON);
+// ═══ FIREBASE ═══
+const FB_PROJECT = 'mura-app-387dc';
+const FB_KEY = 'AIzaSyCyv7TQYPvSt2zvr4b24KQ9RTHSvRI3230';
+const FB_URL = `https://firestore.googleapis.com/v1/projects/${FB_PROJECT}/databases/(default)/documents/mura/datos`;
+
+function setSyncStatus(s) {
+  const dot = document.getElementById('sync-dot');
+  const badge = document.getElementById('sync-badge-text');
+  const map = {off:['off','Sin conectar'],ok:['ok','Conectado ✓'],err:['err','Error'],syncing:['syncing','Sincronizando...']};
+  const [cls,txt] = map[s]||map.off;
+  dot.className='sync-dot '+cls; badge.className='sync-badge '+cls; badge.textContent=txt;
 }
-function doPost(e){
-  var ss=SpreadsheetApp.getActiveSpreadsheet();
-  var sh=ss.getSheetByName('data')||ss.insertSheet('data');
-  if(sh.getLastRow()===0)sh.appendRow(['json']);
-  sh.getRange(2,1).setValue(e.postData.contents);
-  return ContentService.createTextOutput('ok');
-}`;
+
+async function fbGuardar() {
+  setSyncStatus('syncing');
+  try {
+    const payload = {fields:{datos:{stringValue:JSON.stringify(S)},updated:{stringValue:new Date().toISOString()}}};
+    const r = await fetch(`${FB_URL}?key=${FB_KEY}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(!r.ok) throw new Error(await r.text());
+    setSyncStatus('ok');
+    document.getElementById('sync-last').textContent='Guardado: '+new Date().toLocaleTimeString('es-ES');
+    document.getElementById('firebase-status').textContent='✓ Datos guardados en la nube';
+    showAlert('Datos guardados en la nube ✓','success');
+  } catch(e) {
+    setSyncStatus('err');
+    document.getElementById('firebase-status').textContent='Error: '+e.message;
+    showAlert('Error al guardar. Inténtalo de nuevo.','error');
+  }
+}
+
+async function fbCargar() {
+  setSyncStatus('syncing');
+  try {
+    const r = await fetch(`${FB_URL}?key=${FB_KEY}`);
+    if(r.status===404){setSyncStatus('ok');document.getElementById('firebase-status').textContent='Nube vacía — guarda tus datos primero';showAlert('La nube está vacía. Pulsa "Guardar en nube" primero.','info');return;}
+    if(!r.ok) throw new Error(await r.text());
+    const doc = await r.json();
+    const datos = doc.fields?.datos?.stringValue;
+    if(!datos) throw new Error('Sin datos');
+    const remote = JSON.parse(datos);
+    S={pedidos:remote.pedidos||[],productos:remote.productos||[],filamentos:remote.filamentos||[],gastos:remote.gastos||[],notas:remote.notas||[]};
+    persistLocal(); render();
+    setSyncStatus('ok');
+    document.getElementById('sync-last').textContent='Cargado: '+new Date().toLocaleTimeString('es-ES');
+    document.getElementById('firebase-status').textContent='✓ Datos cargados desde la nube';
+    showAlert('Datos cargados desde la nube ✓','success');
+  } catch(e) {
+    setSyncStatus('err');
+    document.getElementById('firebase-status').textContent='Error: '+e.message;
+    showAlert('Error al cargar. Inténtalo de nuevo.','error');
+  }
+}
+
+async function saveAndSync() { persistLocal(); fbGuardar(); }
+function updateSyncUI() { setSyncStatus('ok'); document.getElementById('firebase-status').textContent='Firebase listo — usa los botones para sync'; }
 
 // ═══ STORAGE ═══
 function loadLocal() {
   try {
     const d = localStorage.getItem('mura-v5');
-    if (d) { const p = JSON.parse(d); S = p.state || S; sheetUrl = p.sheetUrl || ''; BP = p.bp || BP; MARGENES = p.margenes || MARGENES; }
+    if (d) { const p = JSON.parse(d); S = p.state || S; BP = p.bp || BP; MARGENES = p.margenes || MARGENES; }
   } catch(e) {}
   if (!S.productos) S.productos = [];
-  if (sheetUrl) document.getElementById('sheet-url').value = sheetUrl;
-  document.getElementById('script-code-block').textContent = SCRIPT_CODE;
   updateSyncUI();
 }
 function persistLocal() {
-  try { localStorage.setItem('mura-v5', JSON.stringify({state:S, sheetUrl, bp:BP, margenes:MARGENES})); } catch(e) {}
+  try { localStorage.setItem('mura-v5', JSON.stringify({state:S, bp:BP, margenes:MARGENES})); } catch(e) {}
 }
 function saveBP() {
   BP.filKg = parseFloat(document.getElementById('bp-fil-kg').value)||25;
@@ -654,7 +678,6 @@ function saveBP() {
 }
 
 // ═══ SYNC ═══
-function saveSheetUrl() { sheetUrl = document.getElementById('sheet-url').value.trim(); persistLocal(); updateSyncUI(); }
 function setSyncStatus(s) {
   const dot = document.getElementById('sync-dot');
   const badge = document.getElementById('sync-badge-text');
@@ -662,34 +685,7 @@ function setSyncStatus(s) {
   const [cls,txt] = map[s]||map.off;
   dot.className='sync-dot '+cls; badge.className='sync-badge '+cls; badge.textContent=txt;
 }
-function updateSyncUI() { setSyncStatus(sheetUrl?'ok':'off'); }
-async function syncNow() {
-  if (!sheetUrl) return showAlert('Configura la URL del Apps Script en Ajustes','warning');
-  setSyncStatus('syncing');
-  try {
-    const r = await fetch(sheetUrl); const remote = await r.json();
-    const merge = (local,rem) => { const map={}; [...(rem||[]),...(local||[])].forEach(x=>{if(x&&x.id)map[x.id]=x;}); return Object.values(map); };
-    S.pedidos   = merge(S.pedidos,   remote.pedidos);
-    S.productos = merge(S.productos, remote.productos);
-    S.filamentos= merge(S.filamentos,remote.filamentos);
-    S.gastos    = merge(S.gastos,    remote.gastos);
-    S.notas     = merge(S.notas,     remote.notas);
-    await fetch(sheetUrl,{method:'POST',body:JSON.stringify(S)});
-    setSyncStatus('ok');
-    document.getElementById('sync-last').textContent='Última sync: '+new Date().toLocaleTimeString('es-ES');
-    persistLocal(); render(); showAlert('Sincronizado','success');
-  } catch(e) { setSyncStatus('err'); showAlert('Error al sincronizar. Comprueba la URL.','error'); }
-}
-async function saveAndSync() {
-  persistLocal();
-  if (sheetUrl) {
-    setSyncStatus('syncing');
-    try { await fetch(sheetUrl,{method:'POST',body:JSON.stringify(S)}); setSyncStatus('ok'); document.getElementById('sync-last').textContent='Última sync: '+new Date().toLocaleTimeString('es-ES'); }
-    catch(e) { setSyncStatus('err'); }
-  }
-}
-function toggleInstr() { const el=document.getElementById('sync-instr'); el.style.display=el.style.display==='none'?'block':'none'; }
-function copiarScript() { navigator.clipboard.writeText(SCRIPT_CODE).then(()=>showAlert('Código copiado','success')).catch(()=>showAlert('Copia el código manualmente','info')); }
+
 
 // ═══ TABS ═══
 function showTab(t,el) {
@@ -1386,7 +1382,6 @@ function showAlert(msg,type){
 }
 
 // Auto sync cada 3 min
-setInterval(()=>{if(sheetUrl)syncNow();},3*60*1000);
 
 loadLocal();
 render();
