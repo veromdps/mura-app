@@ -221,7 +221,10 @@ tr.clickable:active td{background:var(--cream)}
 
   <!-- FILAMENTOS -->
   <div class="section" id="tab-filamentos">
-    <div class="toolbar"><button class="btn" onclick="openModal('filamento')">+ Nuevo filamento</button></div>
+    <div class="toolbar">
+      <button class="btn" onclick="openModal('filamento')">+ Nuevo filamento</button>
+      <button class="btn secondary" onclick="registrarTodosComoInversion()">↓ Registrar todos como inversión</button>
+    </div>
     <div class="table-wrap"><table>
       <thead><tr><th>Filamento</th><th>Stock</th><th>€/kg</th><th>Proveedor</th><th></th></tr></thead>
       <tbody id="fil-tbody"></tbody>
@@ -1153,6 +1156,25 @@ function renderProductos(){
       ${p.p3?`<span class="precio-chip best">Etsy: ${fmt(p.p3)}</span>`:''}
     </div>
   </div>`).join('');
+}
+
+function registrarTodosComoInversion(){
+  if(!S.filamentos.length) return showAlert('No tienes filamentos registrados','error');
+  const sinRegistrar=S.filamentos.filter(f=>{
+    // Comprobar si ya hay una inversión con ese filamento
+    return !S.inversiones.find(i=>i.concepto&&i.concepto.includes(f.nombre));
+  });
+  if(!sinRegistrar.length) return showAlert('Todos los filamentos ya están registrados como inversión','info');
+  if(!confirm(`Se van a registrar ${sinRegistrar.length} filamento${sinRegistrar.length!==1?'s':''} como inversión. ¿Continuar?`)) return;
+  const hoy=new Date().toISOString().split('T')[0];
+  sinRegistrar.forEach(f=>{
+    if(!f.precio||!f.total) return;
+    const importe=parseFloat(((f.precio/1000)*f.total).toFixed(2));
+    if(importe<=0) return;
+    S.inversiones.unshift({id:Date.now()+Math.random(),concepto:`Filamento: ${f.nombre} (${f.total}g)`,cat:'Filamento',importe,fecha:hoy,notas:''});
+  });
+  saveAndSync();renderInversion();
+  showAlert(`${sinRegistrar.length} filamento${sinRegistrar.length!==1?'s':''} registrado${sinRegistrar.length!==1?'s':''} como inversión ✓`,'success');
 }
 
 function renderFilamentos(){
