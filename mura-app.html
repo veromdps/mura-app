@@ -406,6 +406,7 @@ tr.clickable:active td{background:var(--cream)}
     <div class="field"><label>Coste real (€)</label><input id="ep-coste" type="number" step="0.01" inputmode="decimal"></div>
     <div class="field"><label>Tiempo impresión (h)</label><input id="ep-tiempo" type="number" step="0.5" inputmode="decimal"></div>
   </div>
+  <div class="field"><label>Gramos de filamento</label><input id="ep-gramos" type="number" placeholder="0" inputmode="numeric"></div>
   <div class="actions-row">
     <button class="btn" onclick="saveEditarProducto()">Guardar</button>
     <button class="btn secondary" onclick="recalcularProducto()">↺ Recalcular</button>
@@ -863,7 +864,7 @@ function saveNuevoProducto(){
   const pr=NP_RESULT.precios;
   const p1=pr['Conocidas']||pr[Object.keys(pr)[0]]||0;
   const p2=pr['Wallapop']||0;const p3=pr['Etsy']||0;
-  const obj={id:NP_EDITING_ID||Date.now(),nombre,cat:document.getElementById('np-cat').value.trim(),desc:document.getElementById('np-desc').value.trim(),p1,p2,p3,coste:NP_RESULT.coste,tiempo:NP_RESULT.tImp||0};
+  const obj={id:NP_EDITING_ID||Date.now(),nombre,cat:document.getElementById('np-cat').value.trim(),desc:document.getElementById('np-desc').value.trim(),p1,p2,p3,coste:NP_RESULT.coste,tiempo:NP_RESULT.tImp||0,gramos:NP_RESULT.gramos||0};
   if(NP_EDITING_ID){const i=S.productos.findIndex(x=>x.id===NP_EDITING_ID);if(i>=0)S.productos[i]=obj;else S.productos.unshift(obj);}
   else S.productos.unshift(obj);
   closeModal('nuevo-producto');renderProductos();saveAndSync();
@@ -880,6 +881,7 @@ function openEditarProducto(id){
   document.getElementById('ep-p3').value=p.p3||'';
   document.getElementById('ep-coste').value=p.coste||'';
   document.getElementById('ep-tiempo').value=p.tiempo||'';
+  document.getElementById('ep-gramos').value=p.gramos||'';
   document.getElementById('modal-editar-producto').classList.add('open');
 }
 function saveEditarProducto(){
@@ -888,7 +890,8 @@ function saveEditarProducto(){
   const obj={id:editingProd,nombre,cat:document.getElementById('ep-cat').value.trim(),desc:document.getElementById('ep-desc').value.trim(),
     p1:parseFloat(document.getElementById('ep-p1').value)||0,p2:parseFloat(document.getElementById('ep-p2').value)||0,
     p3:parseFloat(document.getElementById('ep-p3').value)||0,coste:parseFloat(document.getElementById('ep-coste').value)||0,
-    tiempo:parseFloat(document.getElementById('ep-tiempo').value)||0};
+    tiempo:parseFloat(document.getElementById('ep-tiempo').value)||0,
+    gramos:parseFloat(document.getElementById('ep-gramos').value)||0};
   const i=S.productos.findIndex(x=>x.id===editingProd);S.productos[i]=obj;
   closeModal('editar-producto');renderProductos();saveAndSync();showAlert('Producto actualizado','success');
 }
@@ -1095,7 +1098,7 @@ function renderProductos(){
   empty.style.display='none';
   cont.innerHTML=list.map(p=>`<div class="prod-card" onclick="openEditarProducto(${p.id})">
     <div class="prod-card-nombre">${p.nombre}</div>
-    <div class="prod-card-meta">${[p.cat,p.tiempo?p.tiempo+'h':null,p.coste?'coste '+fmt(p.coste):null].filter(Boolean).join(' · ')}</div>
+    <div class="prod-card-meta">${[p.cat,p.tiempo?p.tiempo+'h':null,p.gramos?p.gramos+'g':null,p.coste?'coste '+fmt(p.coste):null].filter(Boolean).join(' · ')}</div>
     ${p.desc?`<div style="font-size:12px;color:var(--muted);margin-top:3px">${p.desc}</div>`:''}
     <div class="prod-card-precios">
       ${p.p1?`<span class="precio-chip">Conocida: ${fmt(p.p1)}</span>`:''}
